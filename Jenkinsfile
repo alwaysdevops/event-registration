@@ -1,58 +1,83 @@
 pipeline {
+
     agent any
-    
+
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Prepare Python') {
+        stage('Verify Python') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh 'python3 -m venv .venv'
-                        sh '. .venv/bin/activate && pip install --upgrade pip'
-                        sh '. .venv/bin/activate && pip install -r requirements.txt'
-                    } else {
-                        bat 'python -m venv .venv'
-                        bat '.venv\\Scripts\\python.exe -m pip install --upgrade pip'
-                        bat '.venv\\Scripts\\python.exe -m pip install -r requirements.txt'
-                    }
-                }
+                bat 'python --version'
+                bat 'pip --version'
             }
         }
 
-        stage('Test') {
+        stage('Install Dependencies') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh '. .venv/bin/activate && pytest -q'
-                    } else {
-                        bat '.venv\\Scripts\\python.exe -m pytest -q'
-                    }
-                }
+                bat 'pip install -r requirements.txt'
             }
         }
 
-        stage('Build Artifact') {
+        stage('Application Check') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh 'tar -czf event-registration.tar.gz app.py requirements.txt Jenkinsfile README.md'
-                    } else {
-                        bat 'powershell -Command "Compress-Archive -Path app.py,requirements.txt,Jenkinsfile,README.md -DestinationPath event-registration.zip -Force"'
-                    }
-                }
+                bat 'python -m py_compile app.py'
             }
         }
+
+        stage('Verify Docker') {
+            steps {
+                bat 'docker --version'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                bat 'docker build -t event-registration:v1 .'
+            }
+        }
+
+        stage('Show Docker Images') {
+            steps {
+                bat 'docker images'
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+
+                bat '''
+                docker rm -f event-registration-container
+                '''
+
+                bat '''
+                docker run -d --name event-registration-container -p 5000:5000 event-registration:v1
+                '''
+            }
+        }
+
+        stage('Verify Container') {
+            steps {
+                bat 'docker ps'
+            }
+        }
+
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: 'event-registration.zip, event-registration.tar.gz', allowEmptyArchive: true
-            junit allowEmptyResults: true, testResults: '**/test-*.xml'
+
+        success {
+            echo 'Application Built and Running Successfully'
         }
+
+        failure {
+            echo 'Pipeline Failed'
+        }
+
     }
+
 }
