@@ -14,13 +14,13 @@ pipeline {
         stage('Verify Python') {
             steps {
                 bat 'C:\\Users\\Administrator\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe --version'
-                bat 'C:\\Users\\Administrator\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\pip.exe --version'
+                bat 'C:\\Users\\Administrator\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pip --version'
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                bat 'C:\\Users\\Administrator\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\pip.exe install -r requirements.txt'
+                bat 'C:\\Users\\Administrator\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pip install -r requirements.txt'
             }
         }
 
