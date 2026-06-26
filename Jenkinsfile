@@ -8,29 +8,53 @@ pipeline {
     stages {
         stage('Install') {
             steps {
-                sh 'python -m venv $VENV'
-                sh '. $VENV/bin/activate && pip install --upgrade pip && pip install -r requirements.txt'
+                script {
+                    runCommand('python -m venv .venv')
+                    runCommand(
+                        isUnix()
+                            ? '. .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt'
+                            : 'call .venv\\Scripts\\activate.bat && python -m pip install --upgrade pip && pip install -r requirements.txt'
+                    )
+                }
             }
         }
 
         stage('Test') {
             steps {
-                sh '. $VENV/bin/activate && pytest -q'
+                script {
+                    runCommand(
+                        isUnix()
+                            ? '. .venv/bin/activate && pytest -q'
+                            : 'call .venv\\Scripts\\activate.bat && pytest -q'
+                    )
+                }
             }
         }
 
         stage('SonarQube') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh 'sonar-scanner'
+                    script {
+                        runCommand('sonar-scanner')
+                    }
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t event-registration:latest .'
+                script {
+                    runCommand('docker build -t event-registration:latest .')
+                }
             }
         }
+    }
+}
+
+def runCommand(String command) {
+    if (isUnix()) {
+        sh command
+    } else {
+        bat command
     }
 }
