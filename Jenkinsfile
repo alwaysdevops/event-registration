@@ -54,10 +54,18 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Verify Docker') {
             steps {
                 script {
                     runCommand('docker --version')
+                    verifyDockerDaemon()
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
                     runCommand("docker build -t ${env.DOCKER_IMAGE}:${env.BUILD_NUMBER} -t ${env.DOCKER_IMAGE}:latest .")
                 }
             }
@@ -109,4 +117,14 @@ def sonarScannerAvailable() {
     }
 
     return bat(script: 'where sonar-scanner', returnStatus: true) == 0
+}
+
+def verifyDockerDaemon() {
+    def status = isUnix()
+        ? sh(script: 'docker info', returnStatus: true)
+        : bat(script: 'docker info', returnStatus: true)
+
+    if (status != 0) {
+        error 'Docker CLI is installed, but Jenkins cannot reach the Docker daemon. Start Docker Desktop/Docker Engine and make sure the Jenkins service user has permission to access //./pipe/docker_engine.'
+    }
 }
