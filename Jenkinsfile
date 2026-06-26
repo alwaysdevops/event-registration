@@ -44,10 +44,11 @@ pipeline {
 
         stage('SonarQube') {
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    script {
-                        runCommand(isUnix() ? 'command -v sonar-scanner' : 'where sonar-scanner')
+                script {
+                    if (sonarScannerAvailable()) {
                         runCommand('sonar-scanner')
+                    } else {
+                        echo 'sonar-scanner not found. Skipping SonarQube stage.'
                     }
                 }
             }
@@ -100,4 +101,12 @@ def runCommand(String command) {
 
 def pythonCommand() {
     return isUnix() ? 'python3' : "\"${env.WINDOWS_PYTHON}\""
+}
+
+def sonarScannerAvailable() {
+    if (isUnix()) {
+        return sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
+    }
+
+    return bat(script: 'where sonar-scanner', returnStatus: true) == 0
 }
