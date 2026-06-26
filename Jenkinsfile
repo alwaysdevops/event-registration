@@ -2,19 +2,23 @@ pipeline {
     agent any
 
     environment {
-        VENV = ".venv"
+        WINDOWS_PYTHON = 'C:/Users/Administrator/AppData/Local/Python/pythoncore-3.14-64/python.exe'
     }
 
     stages {
-        stage('Install') {
+        stage('Verify Python') {
             steps {
                 script {
-                    runCommand('python -m venv .venv')
-                    runCommand(
-                        isUnix()
-                            ? '. .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt'
-                            : 'call .venv\\Scripts\\activate.bat && python -m pip install --upgrade pip && pip install -r requirements.txt'
-                    )
+                    runCommand("${pythonCommand()} --version")
+                    runCommand("${pythonCommand()} -m pip --version")
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    runCommand("${pythonCommand()} -m pip install -r requirements.txt")
                 }
             }
         }
@@ -22,11 +26,15 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    runCommand(
-                        isUnix()
-                            ? '. .venv/bin/activate && pytest -q'
-                            : 'call .venv\\Scripts\\activate.bat && pytest -q'
-                    )
+                    runCommand("${pythonCommand()} -m pytest -q")
+                }
+            }
+        }
+
+        stage('Application Check') {
+            steps {
+                script {
+                    runCommand("${pythonCommand()} -m py_compile app.py")
                 }
             }
         }
@@ -57,4 +65,8 @@ def runCommand(String command) {
     } else {
         bat command
     }
+}
+
+def pythonCommand() {
+    return isUnix() ? 'python3' : "\"${env.WINDOWS_PYTHON}\""
 }
