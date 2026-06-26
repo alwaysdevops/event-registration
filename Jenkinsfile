@@ -1,8 +1,9 @@
 pipeline {
-    agent any
+    agent {
+        label 'ubuntu-agent'
+    }
 
     environment {
-        WINDOWS_PYTHON = 'C:/Users/Administrator/AppData/Local/Python/pythoncore-3.14-64/python.exe'
         DOCKER_IMAGE = 'abhiaiops88/event-registration'
         DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
         DOCKER_BUILDKIT = '1'
@@ -75,23 +76,10 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        if (isUnix()) {
-                            sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
-                            sh "docker push ${env.DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                            sh "docker push ${env.DOCKER_IMAGE}:latest"
-                            sh 'docker logout'
-                        } else {
-                            bat '''
-                                @echo off
-                                set "DOCKER_PASS_FILE=%WORKSPACE%\\docker-password.txt"
-                                > "%DOCKER_PASS_FILE%" echo %DOCKER_PASS%
-                                docker login -u %DOCKER_USER% --password-stdin < "%DOCKER_PASS_FILE%"
-                                del "%DOCKER_PASS_FILE%"
-                            '''
-                            bat "docker push ${env.DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                            bat "docker push ${env.DOCKER_IMAGE}:latest"
-                            bat 'docker logout'
-                        }
+                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                        sh "docker push ${env.DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                        sh "docker push ${env.DOCKER_IMAGE}:latest"
+                        sh 'docker logout'
                     }
                 }
             }
@@ -100,31 +88,21 @@ pipeline {
 }
 
 def runCommand(String command) {
-    if (isUnix()) {
-        sh command
-    } else {
-        bat command
-    }
+    sh command
 }
 
 def pythonCommand() {
-    return isUnix() ? 'python3' : "\"${env.WINDOWS_PYTHON}\""
+    return 'python3'
 }
 
 def sonarScannerAvailable() {
-    if (isUnix()) {
-        return sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
-    }
-
-    return bat(script: 'where sonar-scanner', returnStatus: true) == 0
+    return sh(script: 'command -v sonar-scanner', returnStatus: true) == 0
 }
 
 def verifyDockerDaemon() {
-    def status = isUnix()
-        ? sh(script: 'docker info', returnStatus: true)
-        : bat(script: 'docker info', returnStatus: true)
+    def status = sh(script: 'docker info', returnStatus: true)
 
     if (status != 0) {
-        error 'Docker CLI is installed, but Jenkins cannot reach the Docker daemon. Start Docker Desktop/Docker Engine and make sure the Jenkins service user has permission to access //./pipe/docker_engine.'
+        error 'Docker CLI is installed, but Jenkins cannot reach the Docker daemon. Start Docker Engine and make sure the Jenkins agent user can run docker, usually by adding it to the docker group.'
     }
 }
