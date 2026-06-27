@@ -6,7 +6,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'abhiaiops88/event-registration'
         DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
-        DOCKER_BUILDKIT = '1'
+        DOCKER_BUILDKIT = '0'
         PYTHON = '.venv/bin/python'
     }
 
