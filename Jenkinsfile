@@ -7,14 +7,15 @@ pipeline {
         DOCKER_IMAGE = 'abhiaiops88/event-registration'
         DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
         DOCKER_BUILDKIT = '1'
+        PYTHON = '.venv/bin/python'
     }
 
     stages {
         stage('Verify Python') {
             steps {
                 script {
-                    runCommand("${pythonCommand()} --version")
-                    runCommand("${pythonCommand()} -m pip --version")
+                    runCommand('python3 --version')
+                    runCommand('python3 -m venv --help > /dev/null')
                 }
             }
         }
@@ -22,7 +23,9 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    runCommand("${pythonCommand()} -m pip install -r requirements.txt")
+                    runCommand('python3 -m venv .venv')
+                    runCommand("${env.PYTHON} -m pip install --upgrade pip")
+                    runCommand("${env.PYTHON} -m pip install -r requirements.txt")
                 }
             }
         }
@@ -30,7 +33,7 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    runCommand("${pythonCommand()} -m pytest -q")
+                    runCommand("${env.PYTHON} -m pytest -q")
                 }
             }
         }
@@ -38,7 +41,7 @@ pipeline {
         stage('Application Check') {
             steps {
                 script {
-                    runCommand("${pythonCommand()} -m py_compile app.py")
+                    runCommand("${env.PYTHON} -m py_compile app.py")
                 }
             }
         }
@@ -79,20 +82,17 @@ pipeline {
                         sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                         sh "docker push ${env.DOCKER_IMAGE}:${env.BUILD_NUMBER}"
                         sh "docker push ${env.DOCKER_IMAGE}:latest"
-                        sh 'docker logout'
                     }
                 }
             }
         }
     }
-}
 
-def runCommand(String command) {
-    sh command
-}
-
-def pythonCommand() {
-    return 'python3'
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+    }
 }
 
 def sonarScannerAvailable() {
@@ -105,4 +105,8 @@ def verifyDockerDaemon() {
     if (status != 0) {
         error 'Docker CLI is installed, but Jenkins cannot reach the Docker daemon. Start Docker Engine and make sure the Jenkins agent user can run docker, usually by adding it to the docker group.'
     }
+}
+
+def runCommand(String command) {
+    sh command
 }
