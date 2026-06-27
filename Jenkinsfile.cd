@@ -1,0 +1,117 @@
+pipeline {
+    agent {
+        label 'ubuntu-agent'
+    }
+
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
+        string(name: 'HOST_PORT', defaultValue: '5000', description: 'Host port exposed on the Ubuntu agent')
+    }
+
+    environment {
+        DOCKER_IMAGE = 'abhiaiops88/event-registration'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
+        CONTAINER_NAME = 'event-registration'
+        VOLUME_NAME = 'event-registration-data'
+        APP_PORT = '5000'
+    }
+
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (!(params.IMAGE_TAG ==~ /^[A-Za-z0-9_.-]+$/)) {
+                        error 'IMAGE_TAG may only contain letters, numbers, dots, underscores, and hyphens.'
+                    }
+                    if (!(params.HOST_PORT ==~ /^[0-9]+$/)) {
+                        error 'HOST_PORT must be a number.'
+                    }
+                }
+            }
+        }
+
+        stage('Verify Docker') {
+            steps {
+                sh 'docker --version'
+                sh 'curl --version'
+                // Replaced custom function with direct inline verification to prevent declarative scoping errors
+                script {
+                    def status = sh(script: 'docker info', returnStatus: true)
+                    if (status != 0) {
+                        error 'Docker CLI is installed, but Jenkins cannot reach Docker Engine. Ensure the Jenkins user is part of the docker group.'
+                    }
+                }
+            }
+        }
+
+        stage('Login To Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                }
+            }
+        }
+
+        stage('Pull Image') {
+            steps {
+                sh "docker pull ${env.DOCKER_IMAGE}:${params.IMAGE_TAG}"
+            }
+        }
+
+        stage('Stop Existing Container') {
+            steps {
+                // Using true ensures the pipeline doesn't break if it's the very first deployment
+                sh "docker rm -f ${env.CONTAINER_NAME} || true"
+            }
+        }
+
+        stage('Prepare Data Volume') {
+            steps {
+                sh "docker volume create ${env.VOLUME_NAME}"
+            }
+        }
+
+        stage('Deploy Container') {
+            steps {
+                sh """
+                    docker run -d \
+                      --name ${env.CONTAINER_NAME} \
+                      --restart unless-stopped \
+                      -p ${params.HOST_PORT}:${env.APP_PORT} \
+                      -e DATABASE_URL=/app/database/app.db \
+                      -v ${env.VOLUME_NAME}:/app/database \
+                      ${env.DOCKER_IMAGE}:${params.IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                // Added #!/bin/bash shebang to prevent Ubuntu/Dash formatting issues
+                sh """#!/bin/bash
+                    for attempt in {1..5}; do
+                      if curl -fsS http://localhost:${params.HOST_PORT}/health; then
+                        echo "App is healthy!"
+                        exit 0
+                      fi
+                      echo "Waiting for app to start (Attempt \$attempt)..."
+                      sleep 3
+                    done
+
+                    echo "Health check failed. Fetching container logs:"
+                    docker logs ${env.CONTAINER_NAME}
+                    exit 1
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+        success {
+            echo "Deployed ${env.DOCKER_IMAGE}:${params.IMAGE_TAG} on port ${params.HOST_PORT}"
+        }
+    }
+}
